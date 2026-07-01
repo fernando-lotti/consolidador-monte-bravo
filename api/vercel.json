@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "api/consolidar.js": {
+      "maxDuration": 60
+    }
+  }
+}
