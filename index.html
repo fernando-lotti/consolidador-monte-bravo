@@ -403,9 +403,15 @@ INCLUA TODOS OS ATIVOS de TODAS as páginas. Não omita nenhum.`;
     })
   });
 
-  if (!response.ok) {
-    const err = await response.json();
-    throw new Error('Erro na API Claude: ' + (err.error?.message || response.status));
+if (!response.ok) {
+    let errMsg = response.status;
+    try {
+      const err = await response.json();
+      errMsg = JSON.stringify(err);
+    } catch(e) {
+      errMsg = await response.text();
+    }
+    throw new Error('Erro na API Claude: ' + errMsg);
   }
 
   const data = await response.json();
