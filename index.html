@@ -387,7 +387,7 @@ rentLiq e rentBrut são percentuais quando disponíveis (número, não string), 
 Para proventos: extraia da seção "Proventos" ou "Dividendos, proventos e outras distribuições". O campo "bruto" é o valor provisionado.
 INCLUA TODOS OS ATIVOS de TODAS as páginas. Não omita nenhum.`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  const response = await fetch('/api/consolidar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
