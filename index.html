@@ -371,34 +371,62 @@ O campo "posicao" é sempre o valor financeiro em reais. rentLiq e rentBrut são
 Para proventos, extraia da seção "Proventos" ou "Dividendos, proventos e outras distribuições".
 INCLUA TODOS OS ATIVOS de TODAS as páginas. Não omita nenhum.`;
 
-  const response = await fetch('/api/consolidar', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'gemini-2.5-pro',
-      payload: {
-        contents: [{
-          parts: [
-            { inline_data: { mime_type: 'application/pdf', data: base64Data.split(',')[1] } },
-            { text: prompt }
-          ]
-        }],
-        generationConfig: {
-          maxOutputTokens: 32000,
-          responseMimeType: 'application/json'
-        }
+const requestBody = {
+    model: 'gemini-2.5-flash',
+    payload: {
+      contents: [{
+        parts: [
+          { inline_data: { mime_type: 'application/pdf', data: base64Data.split(',')[1] } },
+          { text: prompt }
+        ]
+      }],
+      generationConfig: {
+        maxOutputTokens: 32000,
+        responseMimeType: 'application/json'
       }
-    })
-  });
+    }
+  };
 
-  if (!response.ok) {
-    let errMsg = response.status;
-    try { errMsg = JSON.stringify(await response.json()); }
-    catch(e) { errMsg = await response.text(); }
-    throw new Error('Erro na API Gemini: ' + errMsg);
+  const MAX_RETRIES = 3;
+  let data = null;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch('/api/consolidar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      if (response.ok) {
+        data = await response.json();
+        break; // sucesso, sai do loop
+      }
+
+      let errMsg = response.status;
+      try { errMsg = JSON.stringify(await response.json()); }
+      catch(e) { errMsg = await response.text(); }
+
+      // Só vale a pena tentar de novo em erros temporários (503 sobrecarga, 429 limite de taxa)
+      const isRetryable = response.status === 503 || response.status === 429;
+      lastError = new Error('Erro na API Gemini: ' + errMsg);
+
+      if (!isRetryable || attempt === MAX_RETRIES) {
+        throw lastError;
+      }
+
+      const waitMs = attempt * 2000; // 2s, 4s, 6s
+      setStatus(`API ocupada, tentando novamente em ${waitMs/1000}s… (tentativa ${attempt}/${MAX_RETRIES})`);
+      await new Promise(r => setTimeout(r, waitMs));
+
+    } catch (e) {
+      if (attempt === MAX_RETRIES) throw e;
+      lastError = e;
+    }
   }
 
-  const data = await response.json();
+  if (!data) throw lastError || new Error('Falha ao obter resposta da API Gemini');
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) throw new Error('Resposta vazia da API Gemini: ' + JSON.stringify(data));
 
