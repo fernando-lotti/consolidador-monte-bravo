@@ -116,7 +116,8 @@ td.negative{color:#c0392b;}
 #pdf-frame{display:none;}
 @media print{
   body>*:not(#pdf-frame){display:none!important;}
-  #pdf-frame{display:block!important;position:fixed;top:0;left:0;width:100%;height:100%;}
+  #pdf-frame{display:block!important;position:static!important;width:100%;height:auto!important;}
+  html,body{height:auto!important;overflow:visible!important;}
 }
 </style>
 </head>
