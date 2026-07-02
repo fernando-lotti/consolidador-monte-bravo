@@ -344,7 +344,7 @@ function extractProventosXlsx(rows, ownerKey){
 async function parsePDFviaAPI(base64Data, ownerKey, accountName) {
   const prompt = `Você é um extrator de dados financeiros. Analise este relatório de Posição Consolidada da Monte Bravo Corretora e extraia TODOS os dados estruturados.
 
-Retorne APENAS um objeto JSON válido com esta estrutura exata (sem markdown, sem texto extra):
+Retorne APENAS um objeto JSON válido com esta estrutura exata:
 {
   "clientName": "Nome completo do cliente",
   "totalPatrimony": 0.00,
@@ -353,76 +353,60 @@ Retorne APENAS um objeto JSON válido com esta estrutura exata (sem markdown, se
       "total": 0.00,
       "subcategories": {
         "NomeDaSubcategoria": [
-          {
-            "nome": "Nome do ativo",
-            "posicao": 0.00,
-            "rentLiq": null,
-            "rentBrut": null
-          }
+          { "nome": "Nome do ativo", "posicao": 0.00, "rentLiq": null, "rentBrut": null }
         ]
       }
     }
   },
   "proventos": [
-    {
-      "ativo": "ticker",
-      "evento": "DIVIDENDO",
-      "previsao": "dd/mm/aaaa",
-      "bruto": 0.00,
-      "liquido": 0.00
-    }
+    { "ativo": "ticker", "evento": "DIVIDENDO", "previsao": "dd/mm/aaaa", "bruto": 0.00, "liquido": 0.00 }
   ]
 }
 
 Categorias possíveis: Renda Fixa, Fundos de Investimentos, Fundos Imobiliários, Ações, Previdência Privada, COE, Produtos Estruturados, Mercadorias e Futuros, Opções.
 Para Renda Fixa, subcategorias são: Prefixada, Pós-Fixada, Inflação.
 Para Fundos, subcategorias são o tipo de fundo (ex: Fundos de Renda Fixa Pós-Fixado, Fundos Alternativos, Fundos Multimercados, Fundos de Inflação, Fundos de Renda Variável Brasil, Fundos Listados, Renda Fixa Global).
-Para Ações, subcategoria é "Renda Variável".
-Para COE e Previdência, subcategoria é o próprio nome da categoria.
-Para Fundos Imobiliários, subcategoria é "Fundos Listados".
-Para Opções, subcategoria é "Derivativos de Balcão".
-
-O campo "posicao" é sempre o valor financeiro em reais (coluna "Posição" ou "Posição A Mercado" para RF, ou coluna "Posição" para fundos/ações/FIIs).
-rentLiq e rentBrut são percentuais quando disponíveis (número, não string), ou null.
-Para proventos: extraia da seção "Proventos" ou "Dividendos, proventos e outras distribuições". O campo "bruto" é o valor provisionado.
-INCLUA TODOS OS ATIVOS de TODAS as páginas. Não omita nenhum. Seja conciso: não repita texto, não adicione comentários, retorne SOMENTE o JSON minificado (sem espaços/quebras de linha desnecessárias).`;
+Para Ações, subcategoria é "Renda Variável". Para COE e Previdência, subcategoria é o próprio nome da categoria. Para Fundos Imobiliários, subcategoria é "Fundos Listados". Para Opções, subcategoria é "Derivativos de Balcão".
+O campo "posicao" é sempre o valor financeiro em reais. rentLiq e rentBrut são percentuais (número) ou null.
+Para proventos, extraia da seção "Proventos" ou "Dividendos, proventos e outras distribuições".
+INCLUA TODOS OS ATIVOS de TODAS as páginas. Não omita nenhum.`;
 
   const response = await fetch('/api/consolidar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 32000,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64Data.split(',')[1] } },
-          { type: 'text', text: prompt }
-        ]
-      }]
+      model: 'gemini-2.5-flash',
+      payload: {
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: 'application/pdf', data: base64Data.split(',')[1] } },
+            { text: prompt }
+          ]
+        }],
+        generationConfig: {
+          maxOutputTokens: 32000,
+          responseMimeType: 'application/json'
+        }
+      }
     })
   });
 
-if (!response.ok) {
+  if (!response.ok) {
     let errMsg = response.status;
-    try {
-      const err = await response.json();
-      errMsg = JSON.stringify(err);
-    } catch(e) {
-      errMsg = await response.text();
-    }
-    throw new Error('Erro na API Claude: ' + errMsg);
+    try { errMsg = JSON.stringify(await response.json()); }
+    catch(e) { errMsg = await response.text(); }
+    throw new Error('Erro na API Gemini: ' + errMsg);
   }
 
   const data = await response.json();
-  const text = data.content.map(b => b.text || '').join('');
-  const clean = text.replace(/```json|```/g, '').trim();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) throw new Error('Resposta vazia da API Gemini: ' + JSON.stringify(data));
 
+  const clean = text.replace(/```json|```/g, '').trim();
   let parsed;
   try { parsed = JSON.parse(clean); }
-  catch(e) { throw new Error('Resposta da API inválida: ' + text.slice(0, 200)); }
+  catch(e) { throw new Error('Resposta da API inválida: ' + clean.slice(0, 300)); }
 
-  // Convert to internal format
   const sections = {};
   for (const [catName, catData] of Object.entries(parsed.categories || {})) {
     sections[catName] = { total: catData.total || 0, subcats: {} };
@@ -440,11 +424,7 @@ if (!response.ok) {
     evento: p.evento, previsao: p.previsao, owner: ownerKey
   }));
 
-  return {
-    name: parsed.clientName || accountName,
-    total: parsed.totalPatrimony || 0,
-    sections, proventos
-  };
+  return { name: parsed.clientName || accountName, total: parsed.totalPatrimony || 0, sections, proventos };
 }
 
 // ─────────────────────────────────────────────
