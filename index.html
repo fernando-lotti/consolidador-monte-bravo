@@ -356,8 +356,7 @@ Retorne APENAS um objeto JSON válido com esta estrutura exata (sem markdown, se
             "nome": "Nome do ativo",
             "posicao": 0.00,
             "rentLiq": null,
-            "rentBrut": null,
-            "extra": {}
+            "rentBrut": null
           }
         ]
       }
@@ -385,14 +384,14 @@ Para Opções, subcategoria é "Derivativos de Balcão".
 O campo "posicao" é sempre o valor financeiro em reais (coluna "Posição" ou "Posição A Mercado" para RF, ou coluna "Posição" para fundos/ações/FIIs).
 rentLiq e rentBrut são percentuais quando disponíveis (número, não string), ou null.
 Para proventos: extraia da seção "Proventos" ou "Dividendos, proventos e outras distribuições". O campo "bruto" é o valor provisionado.
-INCLUA TODOS OS ATIVOS de TODAS as páginas. Não omita nenhum.`;
+INCLUA TODOS OS ATIVOS de TODAS as páginas. Não omita nenhum. Seja conciso: não repita texto, não adicione comentários, retorne SOMENTE o JSON minificado (sem espaços/quebras de linha desnecessárias).`;
 
   const response = await fetch('/api/consolidar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
+      max_tokens: 32000,
       messages: [{
         role: 'user',
         content: [
